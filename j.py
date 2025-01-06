@@ -2,10 +2,9 @@ import os
 import re
 import uuid
 from requests import post, get
-from datetime import datetime
 from rich.console import Console
 
-# Colors for output
+# ألوان المخرجات
 COLORS = {
     "magenta": "\033[1m\033[35m",
     "cyan": "\033[1m\033[36m",
@@ -19,14 +18,14 @@ uid = str(uuid.uuid4())
 
 
 def install_package(package_name):
-    """Install the package if not already installed."""
+    """تثبيت المكتبة إذا لم تكن موجودة."""
     try:
         __import__(package_name)
     except ImportError:
         os.system(f"pip install {package_name}")
 
 
-# Ensure required packages are installed
+# التأكد من تثبيت المكتبات المطلوبة
 install_package("requests")
 install_package("rich")
 
@@ -99,14 +98,86 @@ def report_instagram(target_id, sessionid, csrftoken):
             else:
                 console.print(f"Report sent successfully! Status: {response.status_code}", style="bold green")
         except Exception as e:
-            console.print(f"Error: {e}", style="bold red")
+            console.print(f"[!] Error: {e}", style="bold red")
             break
 
 
 def starter():
     user = input(f"{COLORS['cyan']}[+] Username: {COLORS['reset']}@")
+    if not user:
+        console.print("[!] You must provide a username.", style="bold red")
+        return
+
     password = input(f"{COLORS['cyan']}[+] Password: {COLORS['reset']}")
-    # Add login and reporting flow here...
+    if not password:
+        console.print("[!] You must provide a password.", style="bold red")
+        return
+
+    try:
+        # تسجيل الدخول
+        login_response = post(
+            'https://i.instagram.com/api/v1/accounts/login/',
+            headers={
+                'User-Agent': 'Instagram 114.0.0.38.120 Android (30/3.0; 216dpi; 1080x2340; huawei/google; Nexus 6P; angler; angler; en_US)',
+                "Accept": "*/*",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                'Host': 'i.instagram.com'
+            },
+            data={
+                '_uuid': uid,
+                'password': password,
+                'username': user,
+                'device_id': uid,
+                'from_reg': 'false',
+                '_csrftoken': 'missing',
+                'login_attempt_count': '0'
+            },
+            allow_redirects=True
+        )
+
+        # معالجة الرد
+        if 'logged_in_user' in login_response.text:
+            console.print("- Login Successful!", style="bold green")
+            sessionid = login_response.cookies.get('sessionid')
+            csrftoken = login_response.cookies.get('csrftoken')
+
+            # إدخال الهدف
+            target = input("- Enter Target Username: ")
+            if not target:
+                console.print("[!] Target username is required.", style="bold red")
+                return
+
+            # الحصول على ID الهدف
+            target_response = get(
+                f"https://www.instagram.com/{target}/?__a=1",
+                headers={
+                    'User-Agent': 'Mozilla/5.0',
+                    'cookie': f'csrftoken={csrftoken}'
+                }
+            )
+
+            if target_response.status_code == 200:
+                target_data = target_response.json()
+                target_id = target_data['graphql']['user']['id']
+                console.print(f"- Target ID: {target_id}", style="bold green")
+                report_instagram(target_id, sessionid, csrftoken)
+            else:
+                console.print(f"[!] Failed to fetch target ID. Status: {target_response.status_code}", style="bold red")
+        else:
+            # رسائل الأخطاء
+            if 'ip_block' in login_response.text:
+                console.print("[!] IP Blocked. Change your IP.", style="bold red")
+            elif 'The password you entered is incorrect' in login_response.text:
+                console.print("[!] Incorrect Password.", style="bold red")
+            elif 'two_factor_required' in login_response.text:
+                console.print("[!] Two-Factor Authentication required.", style="bold orange3")
+            elif 'challenge_required' in login_response.text:
+                console.print("[!] Account security challenge required.", style="bold orange3")
+            else:
+                console.print("[!] Login failed. Check credentials or try again later.", style="bold red")
+
+    except Exception as e:
+        console.print(f"[!] Error during login process: {e}", style="bold red")
 
 
 header()
