@@ -1,6 +1,7 @@
 import os
 import re
 import uuid
+import time
 from requests import post, get
 from rich.console import Console
 
@@ -48,7 +49,35 @@ Bot Instagram ~ 6m9.c
     """)
 
 
+def fetch_target_id(target, csrftoken):
+    """محاولة الحصول على ID الهدف مع دعم إعادة المحاولة."""
+    retries = 5  # عدد المحاولات
+    for attempt in range(retries):
+        try:
+            response = get(
+                f"https://www.instagram.com/{target}/?__a=1",
+                headers={
+                    'User-Agent': 'Mozilla/5.0',
+                    'cookie': f'csrftoken={csrftoken}'
+                }
+            )
+
+            if response.status_code == 200:
+                target_data = response.json()
+                return target_data['graphql']['user']['id']
+            elif response.status_code == 429:
+                console.print(f"[!] Rate limit reached. Retrying in {2 ** attempt} seconds...", style="bold yellow")
+                time.sleep(2 ** attempt)  # تأخير باستخدام الأسلوب الأسي
+            else:
+                console.print(f"[!] Failed to fetch target ID. Status: {response.status_code}", style="bold red")
+                break
+        except Exception as e:
+            console.print(f"[!] Error fetching target ID: {e}", style="bold red")
+    return None
+
+
 def report_instagram(target_id, sessionid, csrftoken):
+    """الإبلاغ عن هدف معين."""
     header()
     print(f"""
 {COLORS['cyan']} _____________________________
@@ -90,10 +119,10 @@ def report_instagram(target_id, sessionid, csrftoken):
                 allow_redirects=False
             )
             if response.status_code == 429:
-                console.print("Rate limit exceeded. Try later.", style="bold red")
+                console.print("[!] Rate limit exceeded. Try later.", style="bold red")
                 break
             elif response.status_code == 500:
-                console.print("Target not found.", style="bold red")
+                console.print("[!] Target not found.", style="bold red")
                 break
             else:
                 console.print(f"Report sent successfully! Status: {response.status_code}", style="bold green")
@@ -103,6 +132,7 @@ def report_instagram(target_id, sessionid, csrftoken):
 
 
 def starter():
+    """الدالة الرئيسية لتسجيل الدخول ومعالجة الهدف."""
     user = input(f"{COLORS['cyan']}[+] Username: {COLORS['reset']}@")
     if not user:
         console.print("[!] You must provide a username.", style="bold red")
@@ -135,7 +165,6 @@ def starter():
             allow_redirects=True
         )
 
-        # معالجة الرد
         if 'logged_in_user' in login_response.text:
             console.print("- Login Successful!", style="bold green")
             sessionid = login_response.cookies.get('sessionid')
@@ -147,34 +176,15 @@ def starter():
                 console.print("[!] Target username is required.", style="bold red")
                 return
 
-            # الحصول على ID الهدف
-            target_response = get(
-                f"https://www.instagram.com/{target}/?__a=1",
-                headers={
-                    'User-Agent': 'Mozilla/5.0',
-                    'cookie': f'csrftoken={csrftoken}'
-                }
-            )
-
-            if target_response.status_code == 200:
-                target_data = target_response.json()
-                target_id = target_data['graphql']['user']['id']
+            # الحصول على ID الهدف مع إعادة المحاولة
+            target_id = fetch_target_id(target, csrftoken)
+            if target_id:
                 console.print(f"- Target ID: {target_id}", style="bold green")
                 report_instagram(target_id, sessionid, csrftoken)
             else:
-                console.print(f"[!] Failed to fetch target ID. Status: {target_response.status_code}", style="bold red")
+                console.print("[!] Failed to fetch target ID after multiple attempts.", style="bold red")
         else:
-            # رسائل الأخطاء
-            if 'ip_block' in login_response.text:
-                console.print("[!] IP Blocked. Change your IP.", style="bold red")
-            elif 'The password you entered is incorrect' in login_response.text:
-                console.print("[!] Incorrect Password.", style="bold red")
-            elif 'two_factor_required' in login_response.text:
-                console.print("[!] Two-Factor Authentication required.", style="bold orange3")
-            elif 'challenge_required' in login_response.text:
-                console.print("[!] Account security challenge required.", style="bold orange3")
-            else:
-                console.print("[!] Login failed. Check credentials or try again later.", style="bold red")
+            console.print("[!] Login failed. Check credentials or try again later.", style="bold red")
 
     except Exception as e:
         console.print(f"[!] Error during login process: {e}", style="bold red")
