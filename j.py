@@ -2,7 +2,7 @@ import os
 import re
 import uuid
 import time
-from requests import post, get
+from requests import Session
 from rich.console import Console
 
 # ألوان المخرجات
@@ -17,7 +17,6 @@ COLORS = {
 console = Console()
 uid = str(uuid.uuid4())
 
-
 def install_package(package_name):
     """تثبيت المكتبة إذا لم تكن موجودة."""
     try:
@@ -25,29 +24,65 @@ def install_package(package_name):
     except ImportError:
         os.system(f"pip install {package_name}")
 
-
 # التأكد من تثبيت المكتبات المطلوبة
 install_package("requests")
 install_package("rich")
-
 
 def header():
     os.system("cls" if os.name == "nt" else "clear")
     print(f"""
 {COLORS['magenta']} 
  ░▒▓██████▓▒░░▒▓████████▓▒░░▒▓██████▓▒░░▒▓███████▓▒░░▒▓███████▓▒░  
-░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░    ░▒▓██▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓████████▓▒░  ░▒▓██▓▒░  ░▒▓████████▓▒░▒▓███████▓▒░░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░░▒▓██▓▒░    ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓███████▓▒░  
-
 {COLORS['cyan']}Bot Spam coded by @Abu6ms
 Bot Instagram ~ 6m9.c
 {COLORS['reset']}
     """)
 
+def login_to_instagram(username, password):
+    """محاولة تسجيل الدخول إلى Instagram"""
+    with Session() as session:
+        # Headers محدثة
+        headers = {
+            "User-Agent": "Instagram 123.0.0.21.114 Android (30/3.0; 320dpi; 720x1280; Xiaomi; Redmi Note 8; ginkgo; qcom; en_US)",
+            "Accept": "*/*",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive"
+        }
+
+        data = {
+            "_uuid": uid,
+            "username": username,
+            "password": password,
+            "device_id": uid,
+            "login_attempt_count": "0"
+        }
+
+        try:
+            # إرسال طلب تسجيل الدخول
+            response = session.post(
+                "https://i.instagram.com/api/v1/accounts/login/",
+                headers=headers,
+                data=data
+            )
+
+            if "logged_in_user" in response.text:
+                console.print("[+] Login Successful!", style="bold green")
+                sessionid = response.cookies.get("sessionid")
+                csrftoken = response.cookies.get("csrftoken")
+                return sessionid, csrftoken
+            elif "two_factor_required" in response.text:
+                console.print("[!] Two-Factor Authentication required.", style="bold orange3")
+            elif "challenge_required" in response.text:
+                console.print("[!] Challenge Required. Please resolve security check.", style="bold red")
+            elif "The password you entered is incorrect" in response.text:
+                console.print("[!] Incorrect password. Please check and try again.", style="bold red")
+            else:
+                console.print(f"[!] Login failed: {response.json()}", style="bold red")
+        except Exception as e:
+            console.print(f"[!] Error during login: {e}", style="bold red")
+
+        return None, None
 
 def fetch_target_id(target, csrftoken):
     """محاولة الحصول على ID الهدف مع دعم إعادة المحاولة."""
@@ -75,15 +110,8 @@ def fetch_target_id(target, csrftoken):
             console.print(f"[!] Error fetching target ID: {e}", style="bold red")
     return None
 
-
 def report_instagram(target_id, sessionid, csrftoken):
     """الإبلاغ عن هدف معين."""
-    header()
-    print(f"""
-{COLORS['cyan']} _____________________________
-| {COLORS['magenta']}~ Choose a report type       {COLORS['cyan']} |
-|_____________________________|
-""")
     report_types = [
         "Spam", "Self", "Sale", "Nudity", "Violence",
         "Hate Speech", "Harassment", "Instagram Issue",
@@ -92,103 +120,40 @@ def report_instagram(target_id, sessionid, csrftoken):
         "Violence 1"
     ]
 
-    for idx, report in enumerate(report_types, 1):
-        print(f"| {COLORS['green']}{idx} ~ {COLORS['cyan']}{report}")
+    console.print("\n".join([f"{idx + 1}. {r}" for idx, r in enumerate(report_types)]), style="bold cyan")
+    report_type = input("[+] Enter Report Type Number: ")
 
     try:
-        report_type = int(input("\n-> Enter number (1-15): "))
-        if not 1 <= report_type <= 15:
-            console.print("Invalid choice! Try again.", style="bold red")
-            return
-    except ValueError:
-        console.print("Invalid input. Please enter a number.", style="bold red")
-        return
-
-    while True:
-        try:
-            response = post(
-                f"https://i.instagram.com/users/{target_id}/flag/",
-                headers={
-                    "User-Agent": "Mozilla/5.0",
-                    "Host": "i.instagram.com",
-                    "cookie": f"sessionid={sessionid}",
-                    "X-CSRFToken": csrftoken,
-                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
-                },
-                data=f'source_name=&reason_id={report_type}&frx_context=',
-                allow_redirects=False
-            )
-            if response.status_code == 429:
-                console.print("[!] Rate limit exceeded. Try later.", style="bold red")
-                break
-            elif response.status_code == 500:
-                console.print("[!] Target not found.", style="bold red")
-                break
-            else:
-                console.print(f"Report sent successfully! Status: {response.status_code}", style="bold green")
-        except Exception as e:
-            console.print(f"[!] Error: {e}", style="bold red")
-            break
-
+        response = post(
+            f"https://i.instagram.com/users/{target_id}/flag/",
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "cookie": f"sessionid={sessionid}",
+                "X-CSRFToken": csrftoken,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            },
+            data=f"reason_id={report_type}&source_name=",
+        )
+        if response.status_code == 200:
+            console.print("[+] Report Sent Successfully!", style="bold green")
+        else:
+            console.print(f"[!] Failed to report. Status: {response.status_code}", style="bold red")
+    except Exception as e:
+        console.print(f"[!] Error during report: {e}", style="bold red")
 
 def starter():
-    """الدالة الرئيسية لتسجيل الدخول ومعالجة الهدف."""
-    user = input(f"{COLORS['cyan']}[+] Username: {COLORS['reset']}@")
-    if not user:
-        console.print("[!] You must provide a username.", style="bold red")
-        return
+    header()
+    username = input("[+] Enter Instagram Username: ")
+    password = input("[+] Enter Instagram Password: ")
 
-    password = input(f"{COLORS['cyan']}[+] Password: {COLORS['reset']}")
-    if not password:
-        console.print("[!] You must provide a password.", style="bold red")
-        return
+    sessionid, csrftoken = login_to_instagram(username, password)
 
-    try:
-        # تسجيل الدخول
-        login_response = post(
-            'https://i.instagram.com/api/v1/accounts/login/',
-            headers={
-                'User-Agent': 'Instagram 114.0.0.38.120 Android (30/3.0; 216dpi; 1080x2340; huawei/google; Nexus 6P; angler; angler; en_US)',
-                "Accept": "*/*",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                'Host': 'i.instagram.com'
-            },
-            data={
-                '_uuid': uid,
-                'password': password,
-                'username': user,
-                'device_id': uid,
-                'from_reg': 'false',
-                '_csrftoken': 'missing',
-                'login_attempt_count': '0'
-            },
-            allow_redirects=True
-        )
-
-        if 'logged_in_user' in login_response.text:
-            console.print("- Login Successful!", style="bold green")
-            sessionid = login_response.cookies.get('sessionid')
-            csrftoken = login_response.cookies.get('csrftoken')
-
-            # إدخال الهدف
-            target = input("- Enter Target Username: ")
-            if not target:
-                console.print("[!] Target username is required.", style="bold red")
-                return
-
-            # الحصول على ID الهدف مع إعادة المحاولة
-            target_id = fetch_target_id(target, csrftoken)
-            if target_id:
-                console.print(f"- Target ID: {target_id}", style="bold green")
-                report_instagram(target_id, sessionid, csrftoken)
-            else:
-                console.print("[!] Failed to fetch target ID after multiple attempts.", style="bold red")
+    if sessionid and csrftoken:
+        target = input("[+] Enter Target Username: ")
+        target_id = fetch_target_id(target, csrftoken)
+        if target_id:
+            report_instagram(target_id, sessionid, csrftoken)
         else:
-            console.print("[!] Login failed. Check credentials or try again later.", style="bold red")
+            console.print("[!] Failed to fetch target ID.", style="bold red")
 
-    except Exception as e:
-        console.print(f"[!] Error during login process: {e}", style="bold red")
-
-
-header()
 starter()
